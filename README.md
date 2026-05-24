@@ -1,4 +1,4 @@
-# 🇺🇸 US Visa Appointment Bot (Python)
+# 🇺🇸 US Visa Appointment — Kenya (Nairobi)
 
 An automated bot that monitors the [US Visa appointment portal](https://ais.usvisa-info.com) and notifies you — or books automatically — when an earlier slot opens within your target date range.
 
@@ -29,8 +29,8 @@ An automated bot that monitors the [US Visa appointment portal](https://ais.usvi
 
 ```bash
 # Clone the repo
-git clone https://github.com/your-username/us-visa-bot-python.git
-cd us-visa-bot-python
+git clone https://github.com/your-username/us-visa-appointment-ke.git
+cd us-visa-appointment-ke
 
 # Create and activate a virtual environment
 python -m venv venv
@@ -46,7 +46,7 @@ playwright install chrome
 
 ## Configuration
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (use `.env.example` as a template):
 
 ```env
 # Your ais.usvisa-info.com credentials
@@ -60,10 +60,11 @@ COUNTRY_CODE=ke
 # https://ais.usvisa-info.com/en-ke/niv/schedule/{SCHEDULE_ID}/continue_actions
 SCHEDULE_ID=12345678
 
-# Found in network requests when selecting a date on the reschedule page
+# Found in DevTools → Network tab when loading the reschedule page
+# Look for: appointment/days/{FACILITY_ID}.json
 FACILITY_ID=104
 
-# Date range — bot only books slots within this window (YYYY-MM-DD)
+# Date range — bot only considers slots within this window (YYYY-MM-DD)
 MIN_DATE=2026-05-23
 TARGET_DATE=2026-06-05
 
@@ -82,9 +83,9 @@ TELEGRAM_CHAT_IDS=your_chat_id
 
 | Variable | Where to find it |
 |---|---|
-| `COUNTRY_CODE` | URL after `/en-` e.g. `ke` for Kenya, `fr` for France |
+| `COUNTRY_CODE` | URL after `/en-` — e.g. `ke` for Kenya, `fr` for France |
 | `SCHEDULE_ID` | URL when rescheduling: `.../schedule/{SCHEDULE_ID}/...` |
-| `FACILITY_ID` | DevTools → Network tab → look for `appointment/days/{FACILITY_ID}.json` when loading the reschedule page |
+| `FACILITY_ID` | DevTools → Network tab → look for `appointment/days/{FACILITY_ID}.json` on the reschedule page |
 | `TELEGRAM_BOT_TOKEN` | Create a bot via [@BotFather](https://t.me/BotFather) on Telegram |
 | `TELEGRAM_CHAT_IDS` | Your Telegram user ID — get it from [@userinfobot](https://t.me/userinfobot) |
 
@@ -92,13 +93,13 @@ TELEGRAM_CHAT_IDS=your_chat_id
 
 ```bash
 # Dry run — find slots but don't book (recommended first run)
-python bot.py -c 2026-09-15 --dry-run
+python main.py -c 2026-09-15 --dry-run
 
 # Live mode — actually book when a slot is found
-python bot.py -c 2026-09-15
+python main.py -c 2026-09-15
 
 # Headless mode — no browser window (good for servers)
-python bot.py -c 2026-09-15 --headless
+python main.py -c 2026-09-15 --headless
 ```
 
 ### Arguments
