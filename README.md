@@ -151,4 +151,6 @@ This tool is for personal use to monitor your own appointment. Use responsibly a
 
 ## License
 
-MIT
+MIT License — Copyright (c) 2026 [Chumbacash](https://github.com/Chumbacash)
+
+See [LICENSE](LICENSE) for full details.
