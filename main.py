@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
-"""
-US Visa Appointment Bot — Playwright version
-Uses a real Chrome browser for login (bypasses bot detection),
-then uses requests with the extracted session cookie for fast API polling.
-"""
 
 import os
 import sys
 import time
 import argparse
+import winsound
 import requests
 from datetime import datetime, timezone
 from dotenv import dotenv_values
@@ -39,6 +35,27 @@ APPT_URL  = f"{BASE_URL}/schedule/{SCHEDULE_ID}/appointment"
 
 def log(msg):
     print(f"[{datetime.now(timezone.utc).isoformat()}Z] {msg}", flush=True)
+
+def alarm(level='found'):
+    # Plays a looping beep alarm for 2 minutes
+    # level: 'found' = urgent, 'booked' = victory, 'error' = warning
+    try:
+        end_time = time.time() + 120  # 2 minutes
+        if level == 'booked':
+            while time.time() < end_time:
+                for freq in [600, 800, 1000, 1200, 1000, 800]:
+                    winsound.Beep(freq, 250)
+        elif level == 'found':
+            while time.time() < end_time:
+                # Alternating high-low urgent pattern
+                winsound.Beep(1200, 300)
+                winsound.Beep(800, 300)
+        elif level == 'error':
+            while time.time() < end_time:
+                winsound.Beep(400, 500)
+                winsound.Beep(600, 500)
+    except Exception:
+        pass  # Non-Windows or audio unavailable — fail silently
 
 def send_telegram(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS:
@@ -276,6 +293,7 @@ def main():
                 else:
                     earliest = good[0]
                     log(f"📅 Found {len(good)} good date(s): {good} — using {earliest}")
+                    alarm('found')
                     send_telegram(f"📅 <b>Earlier slot found</b>\nDate: {earliest}")
 
                     time_slot = get_available_time(session, earliest)
@@ -283,12 +301,14 @@ def main():
                         log(f"No time slots for {earliest}")
                     elif dry_run:
                         log(f"[DRY RUN] Would book {earliest} at {time_slot}")
+                        alarm('found')
                         send_telegram(f"✅ <b>[DRY RUN] Would book</b>\nDate: {earliest}\nTime: {time_slot}")
                         sys.exit(0)
                     else:
                         log(f"Booking {earliest} at {time_slot}...")
                         book(session, earliest, time_slot)
                         log(f"✅ Booked {earliest} at {time_slot}")
+                        alarm('booked')
                         send_telegram(f"✅ <b>Appointment booked</b>\nDate: {earliest}\nTime: {time_slot}")
                         sys.exit(0)
 
@@ -305,6 +325,7 @@ def main():
 
             if retries >= MAX_RETRIES:
                 log("Max retries reached. Exiting.")
+                alarm('error')
                 send_telegram("🛑 <b>Max retries hit — bot stopped</b>")
                 sys.exit(1)
 
