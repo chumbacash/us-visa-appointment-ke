@@ -143,7 +143,7 @@ The bot sends messages for:
 
 - The bot re-logs in automatically when the session expires
 - The `--current` date should be your existing booked appointment — the bot only looks for dates earlier than this and within your `MIN_DATE`/`TARGET_DATE` window
-- Slots on this portal appear and disappear quickly — a 10-second polling interval is a good balance between responsiveness and avoiding rate limiting
+- Slots on this portal appear and disappear quickly — a 30-second polling interval is a good balance between responsiveness and avoiding rate limiting
 
 ## Disclaimer
 

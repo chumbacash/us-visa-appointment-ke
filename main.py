@@ -24,7 +24,7 @@ PASSWORD      = config.get('PASSWORD')
 COUNTRY_CODE  = config.get('COUNTRY_CODE')
 SCHEDULE_ID   = config.get('SCHEDULE_ID')
 FACILITY_ID   = config.get('FACILITY_ID')
-REFRESH_DELAY = int(config.get('REFRESH_DELAY', 10))
+REFRESH_DELAY = int(config.get('REFRESH_DELAY', 30))
 MAX_RETRIES   = int(config.get('MAX_RETRIES', 10))
 MIN_DATE      = config.get('MIN_DATE')
 TARGET_DATE   = config.get('TARGET_DATE')
@@ -90,7 +90,6 @@ def playwright_login(headless=False):
 
         log(f"Navigating to {SIGN_IN}")
         page.goto(SIGN_IN, wait_until="networkidle", timeout=30000)
-
         # Wait for email field to be ready
         page.wait_for_selector('#user_email', state='visible', timeout=15000)
 
@@ -139,7 +138,6 @@ def playwright_login(headless=False):
 
         # Navigate to appointment page to get a valid session state
         page.goto(APPT_URL, wait_until="networkidle", timeout=30000)
-        log(f"Appointment page loaded: {page.url}")
 
         # Extract _yatri_session cookie
         cookies = context.cookies()
@@ -150,8 +148,7 @@ def playwright_login(headless=False):
 
         # Extract CSRF token from page meta tag
         csrf = page.evaluate("() => document.querySelector('meta[name=\"csrf-token\"]')?.content")
-        log(f"Session cookie extracted ✓")
-        log(f"CSRF token: {csrf[:20] if csrf else 'NOT FOUND'}...")
+        log(f"Session ready ✓")
 
         browser.close()
         return f"_yatri_session={yatri}", csrf
@@ -175,7 +172,6 @@ def build_session(cookie, csrf):
 def get_available_dates(session):
     url = f"{BASE_URL}/schedule/{SCHEDULE_ID}/appointment/days/{FACILITY_ID}.json?appointments[expedite]=false"
     resp = session.get(url, headers={"Accept": "application/json"}, timeout=15)
-    log(f"Dates API → {resp.status_code}")
 
     if resp.status_code == 401:
         raise Exception("Session expired (401) — need to re-login")
