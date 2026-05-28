@@ -2,8 +2,10 @@
 
 import os
 import sys
+import re
 import time
 import argparse
+import threading
 import winsound
 import requests
 from datetime import datetime, timezone
@@ -37,25 +39,26 @@ def log(msg):
     print(f"[{datetime.now(timezone.utc).isoformat()}Z] {msg}", flush=True)
 
 def alarm(level='found'):
-    # Plays a looping beep alarm for 2 minutes
+    # Plays a looping beep alarm for 2 minutes in a background thread
     # level: 'found' = urgent, 'booked' = victory, 'error' = warning
-    try:
-        end_time = time.time() + 120  # 2 minutes
-        if level == 'booked':
-            while time.time() < end_time:
-                for freq in [600, 800, 1000, 1200, 1000, 800]:
-                    winsound.Beep(freq, 250)
-        elif level == 'found':
-            while time.time() < end_time:
-                # Alternating high-low urgent pattern
-                winsound.Beep(1200, 300)
-                winsound.Beep(800, 300)
-        elif level == 'error':
-            while time.time() < end_time:
-                winsound.Beep(400, 500)
-                winsound.Beep(600, 500)
-    except Exception:
-        pass  # Non-Windows or audio unavailable — fail silently
+    def _play():
+        try:
+            end_time = time.time() + 120  # 2 minutes
+            if level == 'booked':
+                while time.time() < end_time:
+                    for freq in [600, 800, 1000, 1200, 1000, 800]:
+                        winsound.Beep(freq, 250)
+            elif level == 'found':
+                while time.time() < end_time:
+                    winsound.Beep(1200, 300)
+                    winsound.Beep(800, 300)
+            elif level == 'error':
+                while time.time() < end_time:
+                    winsound.Beep(400, 500)
+                    winsound.Beep(600, 500)
+        except Exception:
+            pass
+    threading.Thread(target=_play, daemon=True).start()
 
 def send_telegram(message):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_IDS:
@@ -184,6 +187,30 @@ def build_session(cookie, csrf):
     })
     return session
 
+def refresh_session(session):
+    # Attempt a lightweight session refresh via requests — no browser needed
+    # Returns True if session is still alive, False if Playwright re-login is needed
+    try:
+        resp = session.get(APPT_URL, headers={"Accept": "text/html"}, timeout=15)
+        # If redirected to sign_in, session is dead
+        if 'sign_in' in resp.url:
+            log("Session refresh: redirected to sign_in — need re-login")
+            return False
+        sc = resp.headers.get('set-cookie', '')
+        m = re.search(r'_yatri_session=([^;]+)', sc)
+        if m:
+            session.headers.update({"Cookie": f"_yatri_session={m.group(1)}"})
+        csrf_match = re.search(r'<meta name="csrf-token" content="([^"]+)"', resp.text)
+        if csrf_match:
+            session.headers.update({"X-CSRF-Token": csrf_match.group(1)})
+            log("Session refreshed via requests ✓ (no browser needed)")
+            return True
+        log("Session refresh: no CSRF token found — need re-login")
+        return False
+    except Exception as e:
+        log(f"Session refresh failed: {e}")
+        return False
+
 # ─── Appointment API ──────────────────────────────────────────────────────────
 
 def get_available_dates(session):
@@ -198,7 +225,6 @@ def get_available_dates(session):
     # Update cookie from response if rotated
     sc = resp.headers.get('set-cookie', '')
     if '_yatri_session=' in sc:
-        import re
         m = re.search(r'_yatri_session=([^;]+)', sc)
         if m:
             session.headers.update({"Cookie": f"_yatri_session={m.group(1)}"})
@@ -219,6 +245,17 @@ def get_available_time(session, date):
     return times[0] if times else None
 
 def book(session, date, time_slot):
+    # Refresh CSRF token + cookie immediately before booking (mirrors JS version)
+    pre = session.get(APPT_URL, headers={"Accept": "text/html"}, timeout=15)
+    sc = pre.headers.get('set-cookie', '')
+    m = re.search(r'_yatri_session=([^;]+)', sc)
+    if m:
+        session.headers.update({"Cookie": f"_yatri_session={m.group(1)}"})
+    csrf_match = re.search(r'<meta name="csrf-token" content="([^"]+)"', pre.text)
+    if csrf_match:
+        session.headers.update({"X-CSRF-Token": csrf_match.group(1)})
+        log("CSRF refreshed for booking ✓")
+
     resp = session.post(
         APPT_URL,
         data={
@@ -237,6 +274,7 @@ def book(session, date, time_slot):
         allow_redirects=True,
         timeout=15
     )
+    log(f"Booking response: {resp.status_code} — {resp.url}")
     if resp.status_code not in (200, 302):
         raise Exception(f"Booking failed: {resp.status_code}")
     return True
@@ -274,13 +312,25 @@ def main():
 
     session = None
     retries = 0
+    last_refresh = 0  # timestamp of last session refresh
 
     while True:
         try:
             if session is None:
                 cookie, csrf = playwright_login(headless=headless)
                 session = build_session(cookie, csrf)
+                last_refresh = time.time()
                 retries = 0
+
+            # Proactively refresh session every 30 minutes via requests (no browser)
+            elif time.time() - last_refresh > 1800:
+                alive = refresh_session(session)
+                if alive:
+                    last_refresh = time.time()
+                else:
+                    # requests refresh failed — fall back to Playwright
+                    session = None
+                    continue
 
             dates = get_available_dates(session)
 
@@ -298,7 +348,14 @@ def main():
 
                     time_slot = get_available_time(session, earliest)
                     if not time_slot:
-                        log(f"No time slots for {earliest}")
+                        # Retry times a few times — slot may have just appeared
+                        for _ in range(3):
+                            time.sleep(2)
+                            time_slot = get_available_time(session, earliest)
+                            if time_slot:
+                                break
+                    if not time_slot:
+                        log(f"No time slots for {earliest} after retries — slot may have vanished")
                     elif dry_run:
                         log(f"[DRY RUN] Would book {earliest} at {time_slot}")
                         alarm('found')
@@ -321,7 +378,13 @@ def main():
             retries += 1
             log(f"Error (attempt {retries}/{MAX_RETRIES}): {e}")
             send_telegram(f"⚠️ <b>Error</b>\n{e}\nRetry {retries}/{MAX_RETRIES}")
-            session = None  # force re-login next iteration
+
+            # Try lightweight refresh first before launching browser
+            if session and refresh_session(session):
+                last_refresh = time.time()
+                log("Recovered via requests refresh — skipping Playwright re-login")
+            else:
+                session = None  # force Playwright re-login next iteration
 
             if retries >= MAX_RETRIES:
                 log("Max retries reached. Exiting.")
