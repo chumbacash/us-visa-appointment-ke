@@ -1,6 +1,6 @@
 # 🇺🇸 US Visa Appointment — Kenya (Nairobi)
 
-![US Visa Appointment Kenya](assets/us_ke.png)
+![US Visa Appointment Kenya](assets/us_embassy_ke.png)
 
 An automated bot that monitors the [US Visa appointment portal](https://ais.usvisa-info.com) and books the first available slot within your target date range — automatically.
 
