@@ -121,6 +121,25 @@ Pass a date **after** your target range as `-c`. The bot only looks for dates ea
 | `-m`, `--min` | ❌ | Override `MIN_DATE` from `.env` |
 | `--dry-run` | ❌ | Find and log slots without booking |
 | `--headless` | ❌ | Run Chrome without a visible window |
+| `--turbo` | ❌ | Turbo mode — poll every 3 seconds instead of 30 |
+| `--turbo-delay` | ❌ | Set turbo interval in seconds (default: 3, minimum: 1) |
+
+### Turbo Mode
+
+For peak hours when slots drop and disappear within seconds:
+
+```bash
+# Poll every 3 seconds (default turbo)
+python main.py -c 2026-09-15 --turbo
+
+# Poll every 1 second (maximum speed)
+python main.py -c 2026-09-15 --turbo --turbo-delay 1
+
+# Poll every 5 seconds (light turbo)
+python main.py -c 2026-09-15 --turbo --turbo-delay 5
+```
+
+> ⚠️ **Use turbo sparingly.** At 1–3 second intervals the bot makes 1000+ requests per hour. The site may rate-limit or kill your session faster. Best used for short bursts during known peak slot-drop windows, not left running overnight.
 
 ---
 

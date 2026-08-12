@@ -80,6 +80,10 @@ def parse_args():
     parser.add_argument('-m', '--min',     default=MIN_DATE,    help='Minimum acceptable date')
     parser.add_argument('--dry-run', action='store_true', help='Do not actually book')
     parser.add_argument('--headless', action='store_true', default=False, help='Run browser in headless mode')
+    parser.add_argument('--turbo', action='store_true', default=False,
+                        help='Turbo mode — poll every 3 seconds (use sparingly, may trigger rate limiting)')
+    parser.add_argument('--turbo-delay', type=int, default=3,
+                        help='Polling interval in turbo mode in seconds (default: 3, minimum: 1)')
     return parser.parse_args()
 
 def validate_config():
@@ -303,6 +307,13 @@ def main():
     dry_run      = args.dry_run
     headless     = args.headless
 
+    # Turbo mode overrides REFRESH_DELAY — clamp to minimum 1 second
+    if args.turbo:
+        poll_delay = max(1, args.turbo_delay)
+        log(f"⚡ Turbo mode — polling every {poll_delay}s (normal: {REFRESH_DELAY}s)")
+    else:
+        poll_delay = REFRESH_DELAY
+
     log(f"Starting | current: {current_date} | min: {min_date} | target: {target_date} | dry_run: {dry_run}")
     send_telegram(
         f"🟢 <b>Bot started</b>\nCurrent: {current_date}\n"
@@ -369,7 +380,7 @@ def main():
                         send_telegram(f"✅ <b>Appointment booked</b>\nDate: {earliest}\nTime: {time_slot}")
                         sys.exit(0)
 
-            time.sleep(REFRESH_DELAY)
+            time.sleep(poll_delay)
 
         except KeyboardInterrupt:
             log("Stopped by user")
@@ -392,7 +403,7 @@ def main():
                 send_telegram("🛑 <b>Max retries hit — bot stopped</b>")
                 sys.exit(1)
 
-            wait = 60 if '401' in str(e) or 'expired' in str(e).lower() else REFRESH_DELAY
+            wait = 60 if '401' in str(e) or 'expired' in str(e).lower() else poll_delay
             log(f"Waiting {wait}s before retry...")
             time.sleep(wait)
 
